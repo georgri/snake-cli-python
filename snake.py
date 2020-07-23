@@ -9,9 +9,12 @@ import os
 
 from random import randrange
 
-FIELD_X = 50
-FIELD_Y = 20
+FRAME_DELAY = 0.5
+
+FIELD_X = 10
+FIELD_Y = 5
 field = [[' '] * FIELD_X for i in range(FIELD_Y)]
+
 
 class KeyPoller():
     def __enter__(self):
@@ -45,26 +48,42 @@ class KeyPoller():
 
 
 
-def draw(field, snake, bait):
+def draw(field, snake, bait, failed = False, last_chance = True):
 
-    field = [[' '] * FIELD_X for i in range(FIELD_Y)]
-    x,y = snake[0]
-    field[x][y] = 'S'
+    canvas = [[' '] * len(field[0]) for i in range(len(field))]
+
+    # draw head
+    if not failed:
+        x,y = snake[0]
+        canvas[x][y] = 'S'
+    
+    # draw tail
     for x,y in snake[1:]:
-        field[x][y] = 'O'
+        canvas[x][y] = 'O'
 
+    # draw bait
     x,y = bait
-    field[x][y] = 'X'
+    canvas[x][y] = 'X'
 
     # add boundaries
-    field.insert(0, ['='] * len(field[0]))
-    field.append(['='] * len(field[0]))
-    for line in field:
-        line.insert(0, '|')
+    canvas.append(['='] * len(field[0]))
+    canvas.insert(0, ['='] * len(field[0]))
+    for line in canvas:
         line.append('|')
+        line.insert(0, '|')
 
-    for line in field:
+
+    # draw a snake head smashed into a wall or itself :)
+    if failed:
+        x,y = snake[0]
+        canvas[x+1][y+1] = '?' if last_chance else 'Ж'
+        
+
+    print("Snake head: {}, bait: {}". format(snake[0], bait))
+    for line in canvas:
         print(''.join(line))
+    print("SCORE: {}".format((len(snake) - 2) * 10))
+
 
 
         
@@ -83,16 +102,16 @@ def move(snake, direction, bait):
     vectors = [(0,1), (1, 0), (0, -1), (-1, 0)]
     vector = vectors[direction]
     new_head = (snake[0][0] + vector[0], snake[0][1] + vector[1])
-    snake.insert(0, new_head)
+
+    snake_moved = snake[:]
+    snake_moved.insert(0, new_head)
     if new_head != bait:
-        snake.pop()
+        snake_moved.pop()
+
+    return snake_moved
     
 
-def check_bait(field, snake, bait):
-
-    # WTF???
-    if len(snake) >= len(field) * len(field[0]):
-        return (-1,-1)
+def place_bait(field, snake, bait):
 
     while bait in snake:
         # generate new random bait
@@ -100,6 +119,10 @@ def check_bait(field, snake, bait):
     return bait
         
 
+def check_win_condition(field, snake):
+
+    # WTF??? Who is capable of that?
+    return len(snake) >= len(field) * len(field[0])
 
 
 def handle_key_press(c):
@@ -137,16 +160,17 @@ snake = [(1,0), (0,0)]
 # 0 - right, 1 - down, 2 - left, 3 - up
 direction = 0
 
-bait = (8,8)
+bait = (0,0)
+bait = place_bait(field, snake, bait)
 
 counter = 0
 with KeyPoller() as keyPoller:
     while True:
         counter += 1
 
-        for i in range(20):
-            keyPoller.buffer()
+        for i in range(int(FRAME_DELAY / 0.01)):
             time.sleep(0.01)
+            keyPoller.buffer()
 
         
         c = keyPoller.poll()
@@ -156,15 +180,30 @@ with KeyPoller() as keyPoller:
                 break
             c = keyPoller.poll()
 
-        move(snake, direction, bait)
-        bait = check_bait(field, snake, bait)
-        print("Snake head: {}, bait: {}". format(snake[0], bait))
-        
-        if not check_boundaries(field, snake):
+        snake_moved = move(snake, direction, bait)
+        if not check_boundaries(field, snake_moved):
+
+            if last_chance:
+                draw(field, snake, bait, failed = True, last_chance = last_chance)
+                last_chance = False
+                continue
+
+            draw(field, snake_moved, bait, failed = True, last_chance = last_chance)
+
             print("===== GAME OVER! =====")
             exit(0)
+
+        snake = snake_moved
+        last_chance = True
+
+        if check_win_condition(field, snake):
+            print("======= YOU WIN! ======= ")
+            print("======= I admire your resolve, sir! ======")
+            exit(0)
+
+        bait = place_bait(field, snake, bait)
+        
 
         draw(field, snake, bait)
 
 
-        print("SCORE: {}".format((len(snake) - 2) * 10))
