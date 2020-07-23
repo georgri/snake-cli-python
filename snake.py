@@ -39,11 +39,19 @@ class KeyPoller():
         if not dr == []:
             self.queue.append(sys.stdin.read(1))
 
+            # hack for arrow keys
+            if self.queue[-1] == '\x1b':
+                self.queue[-1] += sys.stdin.read(2)
+
+
 
     def poll(self):
         if self.queue:
             return self.queue.pop(0)
         return None
+
+    def empty(self):
+        return not len(self.queue)
 
 
 
@@ -124,26 +132,38 @@ def check_win_condition(field, snake):
     # WTF??? Who is capable of that?
     return len(snake) >= len(field) * len(field[0])
 
+def get_actual_snake_direction(snake):
+    vectors = [(0,1), (1, 0), (0, -1), (-1, 0)]
+    head, neck = snake[0], snake[1]
+    for (direction, (x,y)) in enumerate(vectors):
+        if (x, y) == (head[0] - neck[0], head[1] - neck[1]):
+            return direction
+    return None
 
-def handle_key_press(c):
+
+def handle_key_press(c, snake):
     global direction
-    c = c.lower()
-    if c == 'd': # right
+    direction = get_actual_snake_direction(snake)
+
+    if len(c) == 1:
+        c = c.lower()
+
+    if c in ('d','в','\x1b[C'): # right
         if direction in (0,2):
             return False
         direction = 0
         return True
-    elif c == 's': # down
+    elif c in ('s', 'ы', '\x1b[B'): # down
         if direction in (1,3):
             return False
         direction = 1
         return True
-    elif c == 'a': # left
+    elif c in ('a', 'ф', '\x1b[D'): # left
         if direction in (0,2):
             return False
         direction = 2
         return True
-    elif c == 'w': # up
+    elif c in ('w', 'ц', '\x1b[A'): # up
         if direction in (1,3):
             return False
         direction = 3
@@ -173,10 +193,17 @@ with KeyPoller() as keyPoller:
             keyPoller.buffer()
 
         
+
+        # from all the keys that was being pressed, choose the first one
+        # that would allow the snake not to fail.
         c = keyPoller.poll()
         while not c is None:
-            if handle_key_press(c):
-                print (c)
+            if handle_key_press(c, snake):
+                if not keyPoller.empty(): # there are yet key presses
+                    snake_moved = move(snake, direction, bait)
+                    if not check_boundaries(field, snake_moved):
+                        c = keyPoller.poll()
+                        continue
                 break
             c = keyPoller.poll()
 
@@ -196,7 +223,10 @@ with KeyPoller() as keyPoller:
         snake = snake_moved
         last_chance = True
 
+        draw(field, snake, bait)
+
         if check_win_condition(field, snake):
+            draw(field, snake, bait)
             print("======= YOU WIN! ======= ")
             print("======= I admire your resolve, sir! ======")
             exit(0)
